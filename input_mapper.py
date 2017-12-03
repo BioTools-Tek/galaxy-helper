@@ -5,6 +5,96 @@ import xml.etree.ElementTree as ET
 import sys
 import pdb
 
+class SimpleCheetahVar:  # no 'select'
+
+    def __init__(self, node, cheetah_name):
+        self.__node = node
+
+        self.tag_type = node.get("type")
+        self.name_global = cheetah_name
+        self.name_local = node.get("name")
+        
+        self.optional = node.get("optional") == "true"
+        self.argname = node.get("argument")
+                
+        self.text = self.__optionalWrapper()
+
+    def __optionalWrapper(self):
+        ''' Provides wrapper for all arguments if optional'''
+        main_text = self.__typeAll()
+        if self.optional:
+            main_text = "#if %s\n%s\n#end if" % (
+                self.argname if self.argname is not None else self.name_local,
+                main_text
+            )
+        
+        return main_text
+
+    def __typeAll(self):
+        res = None
+        if self.tag_type == "boolean":
+            res = self.__typeBool()
+        elif self.tag_type == "integer" or self.tag_type == "float":
+            res = self.__typeNumber()
+        elif self.tag_type == "text":
+            res = self.__typeText()
+        elif self.tag_type == "data":
+            res = self.__typeData()
+        elif self.tag_type == "select":
+            print("Select should not be used here", file=sys.stderr)
+            exit(-1)
+            #res = self.__typeSelect()
+        else:
+            print("Unknown type:", self.tag_type, file=sys.stderr)
+            exit(-1)
+
+    def __typeData(self):
+        return "#if $%s\n%s $%s\n#end if" % (
+            self.name_global,
+            self.argname if self.argname is not None else self.name_local,
+            self.name_global
+        )     
+
+    def __typeBool(self):
+        trueval = self._node.get("truevalue")
+        falsval = self._node.get("falsevalue")
+        argname = self.argname if self.argname is not None else self.name_local
+
+        if None in [trueval, falsval]:
+            print("Note: boolean flag '%s' does not have a truevalue or falsevalue."
+                  "      Suggest using '-%s' for truevalue and '' for falsevalue "
+                  % (self.name_local, argname),
+                  file=sys.stderr)
+            exit(-1)
+
+        return "$%s" % argname
+
+    def __typeNumber(self):
+        valmin = self._node.get("min")
+        valmax = self._node.get("max")
+        value = self._node.get("value")
+
+        if None in [valmin, valmax, value]:
+            print("Note: numeric arg '%s' does not have one of min max or default value."
+                  % self.name_local,
+                  file=sys.stderr)
+            exit(-1)
+
+        if self.argname is not None:
+            return "%s $%s" %  (self.argname, self.name_global)
+
+        return "#echo %s" % self.name_local
+
+    def __typeText(self):
+        value = self._node.get("value")
+
+        return "#if str($%s.value) != ""\n%s '$%s.value'\n#end if" % (
+            self.name_global,
+            self.argname if self.argname is not None else "#echo %s" % self.name_local,
+            self.name_global
+        ) 
+        
+
 class InputMapper:
 
     def __init__(self, file1):
@@ -16,35 +106,34 @@ class InputMapper:
 
 
     def work(self,inputs):
-        import pdb
+
         traversed_names = {}
-
-        def optionalwrapper(text, opt):
-            print("%s%s%s" % (
-                "" if not opt else "#if %s\n" % varname,
-                text,
-                "" if not opt else "\n#end if"
-            ))
         
-        def recurseParam(node, parentNode=None, tabamount=0):
+        def recurseParam(node, parentNode=None):
             name = node.get("name")
+            tag  = node.tag     # node.get("tag")
 
-            if name == None:
+            print(":::", name, tag)
+
+            if (name is None) or (tag in ["section","conditional"]):
                 for subnode in node:
-                    return recurseParam(subnode, node, tabamount)
+                    recurseParam(subnode, node)
+                return ""
 
             varname = self.variable_names[name]
             
             if name in traversed_names:
                 return ""
+            
             traversed_names[name] = True
 
-            if node.tag == "param":
+            if tag == "param":
                 ntype = node.get("type")
                 noptl = not(node.get("optional") == None)  # False =!= None
 
                 if ntype == "select":
                     # grab all possible values
+                    pdb.set_trace()
                     option_value_map = getOptions(node)
                     when_value_map = getWhens(parentNode)
 
@@ -52,30 +141,28 @@ class InputMapper:
                         print("Missing value or when field for", name, file=sys.stderr)
                         exit(-1)
 
+                    if noptl:
+                        print("#if %s\n")
+
                     for value in when_value_map:
                         print("#if '%s.value' == %s" % (varname, value))
-                        recurseParam(value, node, tabamount + 1)
+                        recurseParam(value, node)
                         print("#end if")
 
-                elif ntype == "data":
-                    optionalwrapper("[EDIT FOR file '%s']" % varname, noptl)
+                    if noptl:
+                        print("#end if")
 
-                elif ntype == "text":
-                    optionalwrapper("#if str('%s') != ""\n[EDIT FOR text '%s']\n#end if" % (varname, name))
-
-                elif ntype == "boolean":
-                    print("#if %s != ""\n[EDIT FOR boolean '%s']\n#end if" % (varname, name))
-
-                else: # integer, float
-                    optionalwrapper("#[EDIT FOR integer/float '%s']" % (varname, name))
-
+                else:
+                    scv = SimpleCheetahVar(node, varname)
+                    print(scv.text)
 
             for no in node:
-                recurseParam(no, node, tabamount + 1)
-
+                recurseParam(no, node)
             return ""
 
-        recurseParam(inputs, None, 0)
+        # _Main_
+        for inp in inputs:
+            recurseParam(inp, None)
 
 
     def __generateVariableNames(self, inputs):
@@ -112,3 +199,7 @@ class InputMapper:
             param_map[key] = ".".join(param_map[key])
             
         return param_map
+
+
+dela = InputMapper('allegro.xml')
+pdb.set_trace()
