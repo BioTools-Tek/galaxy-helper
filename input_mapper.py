@@ -5,6 +5,8 @@ import xml.etree.ElementTree as ET
 import sys
 import pdb
 
+__version__ = "2017.1"
+
 
 def err(*messages):
     print("Error:", *messages, file=sys.stderr)
@@ -260,4 +262,17 @@ class InputMapper:
         return param_map
 
 
-dela = InputMapper('allegro.xml')
+if __name__ == "__main__":
+
+    if len(sys.argv) < 2:
+        print(
+'''%s
+
+Generates template cheetah code (with correctly resolved variable names) based on a valid tool XML file (i.e. planemo lint throws no errors) containing an <inputs> tag
+
+    usage: %s <tool.xml>
+
+''' % (__version__, sys.argv[0]), file=sys.stderr)
+        exit(-1)
+        
+    InputMapper(sys.argv[1])
