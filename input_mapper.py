@@ -26,15 +26,14 @@ def printtab(text, tablevel):
             print(line)
 
 
-
 class SimpleCheetahVar:  # no 'select'
 
     def __init__(self, node, cheetah_name, tablevel=0):
         self._node = node
 
         self.tag_type = node.get("type")
-        self.name_global = cheetah_name
         self.name_local = node.get("name")
+        self.name_global = cheetah_name
 
         self.optional = node.get("optional") == "true"
         self.argname = node.get("argument")
@@ -112,14 +111,14 @@ class SimpleCheetahVar:  # no 'select'
         if self.argname is not None:
             return "%s $%s" %  (self.argname, self.name_global)
 
-        return "FLAGFOR numeric %s" % self.name_local
+        return "FLAGFOR numeric $%s" % self.name_global
 
     def __typeText(self):
         #default_value = self._node.get("value")
 
         return "#if str($%s.value) != ''\nFLAGFOR text %s '$%s.value'\n#end if" % (
             self.name_global,
-            self.argname if self.argname is not None else "#echo %s" % self.name_local,
+            self.argname if self.argname is not None else "'%s'" % self.name_local,
             self.name_global
         )
 
@@ -175,10 +174,10 @@ class InputMapper:
 
                     # start per when                   
                     if len(when) > 0 and first_valid_when:
-                        printtab("#if '%s.value' == '%s'" % (cheetah_name,val), next_tab)   # when value
+                        printtab("#if %s.value == '%s'" % (cheetah_name,val), next_tab)   # when value
                         first_valid_when = False
                     elif len(when) > 0:
-                        printtab("#elif '%s.value' == '%s'" % (cheetah_name,val), next_tab)   # when value
+                        printtab("#elif %s.value == '%s'" % (cheetah_name,val), next_tab)   # when value
 
                     recurseParam(when, next_tab + 1)
 
